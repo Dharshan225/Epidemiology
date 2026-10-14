@@ -1,0 +1,42 @@
+# Environment variables and secrets (NEVER commit credentials)
+.env
+.env.*
+*.env
+backend/.env
+!.env.example
+!backend/.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+env/
+*.egg-info/
+
+# Testing and linters
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Local databases
+*.db
+data/epidemiology.db
+
+# Frontend dependencies and production build outputs
+node_modules/
+frontend/node_modules/
+dist/
+frontend/dist/
+
+# IDE, OS, and system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+
+# Logs
+*.log

@@ -1,0 +1,7 @@
+{
+  "wards": [
+    {"id": 1, "ward": "Ward 1", "risk": "Medium"},
+    {"id": 2, "ward": "Ward 2", "risk": "High"},
+    {"id": 3, "ward": "Ward 3", "risk": "Low"}
+  ]
+}
