@@ -127,6 +127,15 @@ async def favicon():
         return FileResponse(fav)
     return JSONResponse(status_code=404, content={"detail": "Not Found"})
 
+@app.get("/{full_path:path}", include_in_schema=False)
+async def catch_all_spa(full_path: str, request: Request):
+    accept = request.headers.get("accept", "")
+    index_file = FRONTEND_DIST / "index.html"
+    if "text/html" in accept and index_file.exists():
+        from fastapi.responses import FileResponse
+        return FileResponse(index_file)
+    return JSONResponse(status_code=404, content={"detail": f"Path /{full_path} Not Found"})
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("backend.main:app", host=settings.HOST, port=settings.PORT, reload=True)
