@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 
-from backend.config import settings
+from backend.config import settings, PROJECT_ROOT
 from backend.services.model_service import model_service
 from backend.services.weather_service import weather_service
 from backend.api import (
@@ -97,8 +97,17 @@ app.include_router(routes_wards.router)
 app.include_router(routes_metrics.router)
 app.include_router(routes_auth.router)
 
+FRONTEND_DIST = PROJECT_ROOT / "frontend" / "dist"
+if FRONTEND_DIST.exists() and (FRONTEND_DIST / "assets").exists():
+    from fastapi.staticfiles import StaticFiles
+    app.mount("/assets", StaticFiles(directory=str(FRONTEND_DIST / "assets")), name="frontend_assets")
+
 @app.get("/", tags=["Root"])
-async def root():
+async def root(request: Request):
+    accept = request.headers.get("accept", "")
+    if "text/html" in accept and FRONTEND_DIST.exists() and (FRONTEND_DIST / "index.html").exists():
+        from fastapi.responses import FileResponse
+        return FileResponse(FRONTEND_DIST / "index.html")
     return {
         "name": settings.APP_NAME,
         "version": settings.APP_VERSION,
@@ -109,6 +118,14 @@ async def root():
         "health_check": "/api/health",
         "dashboard": "/api/dashboard"
     }
+
+@app.get("/favicon.svg", include_in_schema=False)
+async def favicon():
+    fav = FRONTEND_DIST / "favicon.svg"
+    if fav.exists():
+        from fastapi.responses import FileResponse
+        return FileResponse(fav)
+    return JSONResponse(status_code=404, content={"detail": "Not Found"})
 
 if __name__ == "__main__":
     import uvicorn
