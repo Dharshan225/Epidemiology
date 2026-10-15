@@ -365,12 +365,32 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [selectedWard, selectedDisease, selectedHorizon]);
+  }, [selectedWard, selectedDisease, selectedHorizon, currentUser]);
 
-  // Initial load and whenever filters change
+  // Initial load and whenever filters or authentication change
   useEffect(() => {
     fetchAllData();
   }, [fetchAllData]);
+
+  // Periodic heartbeat to monitor live connection status
+  useEffect(() => {
+    const checkLiveHealth = async () => {
+      try {
+        const res = await api.getHealth();
+        if (res?.status === "ok") {
+          setIsLiveConnected(true);
+          if (res.model_ready !== undefined) setModelReady(res.model_ready);
+        } else {
+          setIsLiveConnected(false);
+        }
+      } catch {
+        setIsLiveConnected(false);
+      }
+    };
+    checkLiveHealth();
+    const interval = setInterval(checkLiveHealth, 10000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Manual Weather Refresh from Open-Meteo
   const handleRefreshWeather = async () => {

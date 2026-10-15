@@ -224,7 +224,7 @@ export default function AlertsPage({
           className={`dispatch-status-alert ${
             dispatchResult.delivery_status === "SENT"
               ? "status-success"
-              : dispatchResult.delivery_status === "GATEWAY_NOT_CONFIGURED"
+              : dispatchResult.delivery_status === "GATEWAY_NOT_CONFIGURED" || dispatchResult.delivery_status === "SMTP_NOT_CONFIGURED" || dispatchResult.delivery_status === "DEMO_VERIFIED"
               ? "status-warn"
               : "status-failed"
           }`}
@@ -232,14 +232,14 @@ export default function AlertsPage({
           <div className="status-badge-row">
             {dispatchResult.delivery_status === "SENT" ? (
               <CheckCircle2 size={18} className="text-emerald flex-shrink-0" />
-            ) : dispatchResult.delivery_status === "GATEWAY_NOT_CONFIGURED" ? (
+            ) : dispatchResult.delivery_status === "GATEWAY_NOT_CONFIGURED" || dispatchResult.delivery_status === "SMTP_NOT_CONFIGURED" || dispatchResult.delivery_status === "DEMO_VERIFIED" ? (
               <AlertTriangle size={18} className="text-amber flex-shrink-0" />
             ) : (
               <XCircle size={18} className="text-red flex-shrink-0" />
             )}
             <div>
               <strong>
-                SMS Delivery Status:{" "}
+                {dispatchResult.recipient_email ? "Email Alert Status: " : "SMS Delivery Status: "}
                 <span className="font-mono">{dispatchResult.delivery_status}</span>
               </strong>
               <p className="status-explanation">
