@@ -12,6 +12,7 @@ import {
   ShieldCheck,
   Building,
   Phone,
+  Mail,
   Send,
   XCircle,
   Radio,
@@ -75,18 +76,48 @@ export default function AlertsPage({
     }
   };
 
+  const handleDispatchEmailAlert = async (forceOverride = false) => {
+    setDispatching(true);
+    setDispatchResult(null);
+    try {
+      const highRiskWard = wardData.find((w) => w.risk === "High" || w.cases >= 24) || { name: "Ward 07 (Gandhipuram)", cases: 34 };
+      const res = await api.dispatchAlertEmail({
+        recipient_email: currentUser?.email,
+        recipient_name: currentUser?.name,
+        district: selectedDistrict || "Coimbatore",
+        ward: highRiskWard.name,
+        disease: selectedDisease,
+        risk_level: "HIGH RISK",
+        cases: highRiskWard.cases,
+        prediction_date: new Date().toISOString().split("T")[0],
+        force: forceOverride || forceDispatch,
+      });
+      setDispatchResult(res);
+    } catch (err) {
+      setDispatchResult({
+        status: "failed",
+        delivery_status: "FAILED",
+        error: err.message,
+      });
+    } finally {
+      setDispatching(false);
+    }
+  };
+
   const handleEvaluateThresholds = async () => {
     setDispatching(true);
     setDispatchResult(null);
     try {
       const res = await api.evaluateThresholdAlerts(selectedDisease, forceDispatch);
-      if (res?.results && res.results.length > 0) {
+      if (res?.email_results && res.email_results.length > 0) {
+        setDispatchResult(res.email_results[0]);
+      } else if (res?.results && res.results.length > 0) {
         setDispatchResult(res.results[0]);
       } else {
         setDispatchResult({
-          status: "delivered",
-          delivery_status: "SENT",
-          error: "All monitored municipal wards currently remain below high-risk threshold (cases < 24).",
+          status: "evaluated",
+          delivery_status: res?.delivery_status || "EVALUATED",
+          error: res?.message || "All monitored municipal wards currently remain below high-risk threshold (cases < 24).",
         });
       }
     } catch (err) {
@@ -113,21 +144,18 @@ export default function AlertsPage({
         </div>
       </div>
 
-      {/* Emergency SMS Notification Action Bar */}
+      {/* Emergency Alert Notification Action Bar (Email + SMS) */}
       <div className="sms-alert-dispatcher-bar">
         <div className="dispatcher-left">
           <div className="dispatcher-icon-box">
-            <Phone size={20} className="text-cyan" />
+            <Mail size={20} className="text-cyan" />
           </div>
           <div>
-            <h4>Municipal Officer SMS Alert System</h4>
+            <h4>Municipal Officer High-Risk Alert Engine</h4>
             <p>
-              Registered Recipient:{" "}
-              <strong>{currentUser?.name || "Dr. K. Sundaram (CMHO)"}</strong> ·{" "}
-              <span className="font-mono text-cyan font-bold">
-                {currentUser?.contact_number || "+919842123456"}
-              </span>{" "}
-              ({currentUser ? "Logged In Officer" : "Default Municipal Registry"})
+              Officer: <strong>{currentUser?.name || "Kishore"}</strong> ·{" "}
+              Email: <span className="font-mono text-cyan font-bold">{currentUser?.email || "24121027@drngpit.ac.in"}</span> ·{" "}
+              Phone: <span className="font-mono text-cyan font-bold">{currentUser?.contact_number || "+919345791866"}</span>
             </p>
             <div style={{ marginTop: "6px", display: "flex", alignItems: "center", gap: "10px", fontSize: "12px" }}>
               <label style={{ display: "inline-flex", alignItems: "center", gap: "5px", cursor: "pointer", color: "var(--text-secondary)" }}>
@@ -154,6 +182,24 @@ export default function AlertsPage({
           </button>
           <button
             className="btn-dispatch-sms"
+            onClick={() => handleDispatchEmailAlert(forceDispatch)}
+            disabled={dispatching || highSeverityCount === 0}
+            title={
+              highSeverityCount > 0
+                ? "Send high-risk alert email to registered municipal officer email address"
+                : "No high-risk wards currently triggering alerts"
+            }
+            style={{ background: "linear-gradient(135deg, #059669 0%, #10b981 100%)" }}
+          >
+            <Mail size={15} />
+            <span>
+              {dispatching
+                ? "Transmitting..."
+                : `Dispatch Email Alert (${highSeverityCount} High Risk Wards)`}
+            </span>
+          </button>
+          <button
+            className="btn-dispatch-sms"
             onClick={() => handleDispatchSmsAlert(forceDispatch)}
             disabled={dispatching || highSeverityCount === 0}
             title={
@@ -166,7 +212,7 @@ export default function AlertsPage({
             <span>
               {dispatching
                 ? "Transmitting Alert..."
-                : `Dispatch Emergency SMS (${highSeverityCount} High Risk Wards)`}
+                : `Dispatch SMS Alert`}
             </span>
           </button>
         </div>

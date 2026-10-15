@@ -1,16 +1,20 @@
-from typing import Optional
-from fastapi import APIRouter, Query
+from typing import Optional, Dict, Any
+from fastapi import APIRouter, Query, Depends
 from backend.services.data_service import data_service
 from backend.services.risk_service import risk_service
 from backend.schemas import WardsResponse, RiskResponse
+from backend.api.deps import get_current_officer
 
 router = APIRouter(prefix="/api", tags=["Wards & Risk"])
 
 @router.get("/wards", response_model=WardsResponse)
-async def get_wards():
+async def get_wards(
+    officer: Dict[str, Any] = Depends(get_current_officer)
+):
     """
     Returns verified municipal ward identifiers, census populations,
     and geographic coordinates from official Census 2011 PCA data.
+    Requires authenticated municipal officer session.
     """
     wards = data_service.get_wards()
     return WardsResponse(
@@ -23,18 +27,21 @@ async def get_wards():
 
 @router.get("/risk", response_model=RiskResponse)
 async def get_risk_assessment(
-    disease: Optional[str] = Query("Dengue", description="Target disease for risk assessment")
+    disease: Optional[str] = Query("Dengue", description="Target disease for risk assessment"),
+    officer: Dict[str, Any] = Depends(get_current_officer)
 ):
     """
     Calculates epidemiological risk categories using documented multi-factor index
     (attack rate per 1,000 population, case volume thresholds, and climate suitability).
+    Requires authenticated municipal officer session.
     """
     risk_data = await risk_service.evaluate_wards_risk(disease=disease or "Dengue")
     return risk_data
 
 @router.get("/clusters")
 async def get_ward_clusters(
-    disease: Optional[str] = Query("Dengue", description="Target disease")
+    disease: Optional[str] = Query("Dengue", description="Target disease"),
+    officer: Dict[str, Any] = Depends(get_current_officer)
 ):
     """
     HT-13 Component: Geospatial & Epidemiological Clustering.

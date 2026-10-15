@@ -5,8 +5,13 @@ import httpx
 from fastapi.testclient import TestClient
 from backend.main import app
 from backend.services.sms_service import sms_service
+from backend.services.auth_service import auth_service
+from backend.services.email_service import email_service
+import smtplib
 
 client = TestClient(app)
+client.headers["Authorization"] = f"Bearer {auth_service.default_token}"
+
 
 def test_admin_login_success():
     payload = {
@@ -357,3 +362,113 @@ def test_configure_gateway_endpoint():
         mock_update.assert_called_once_with({"FAST2SMS_API_KEY": "test_live_key", "FAST2SMS_ROUTE": "q"})
         data = res.json()
         assert "validation" in data
+
+def test_email_not_configured_delivery_status():
+    """Verify dispatch-email returns SMTP_NOT_CONFIGURED and never simulates success."""
+    email_service.deduplicator.clear()
+    with patch.object(email_service, "get_credentials", return_value={
+        "smtp_host": "smtp.gmail.com",
+        "smtp_port": 587,
+        "smtp_user": "",
+        "smtp_password": "",
+        "smtp_from_email": "",
+        "smtp_use_tls": True
+    }):
+        payload = {
+            "recipient_email": "24121027@drngpit.ac.in",
+            "ward": "Ward 07 (Gandhipuram)",
+            "disease": "Dengue",
+            "risk_level": "HIGH RISK",
+            "force": True
+        }
+        res = client.post("/api/alerts/dispatch-email", json=payload)
+        assert res.status_code == 200
+        data = res.json()
+        assert data["delivery_status"] == "SMTP_NOT_CONFIGURED"
+        assert data["delivery_confirmed"] is False
+        assert data["status"] != "delivered"
+
+def test_email_content_contains_required_fields():
+    """Verify built email contains district, ward, disease, risk level, date, and actions."""
+    text_body, html_body = email_service.build_email_content(
+        district="Coimbatore",
+        ward="Ward 07 (Gandhipuram)",
+        disease="Dengue",
+        risk_level="HIGH RISK",
+        prediction_date="2026-10-15",
+        recommended_actions=[
+            "Thermal ULV fogging in residential blocks",
+            "Abate larviciding in overhead tanks"
+        ],
+        cases=34,
+        recipient_name="Kishore"
+    )
+    for body in [text_body, html_body]:
+        assert "Coimbatore" in body
+        assert "Ward 07 (Gandhipuram)" in body
+        assert "Dengue" in body
+        assert "HIGH RISK" in body
+        assert "2026-10-15" in body
+        assert "Thermal ULV fogging" in body
+        assert "Abate larviciding" in body
+
+def test_test_email_unauthorized_recipient():
+    """Verify test-email cannot be sent to arbitrary unauthorized third-party emails."""
+    res = client.post("/api/alerts/test-email", json={
+        "recipient_email": "stranger@external.com",
+        "note": "Illegal email"
+    })
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "unauthorized"
+    assert data["delivery_status"] == "FAILED"
+    assert data["delivery_confirmed"] is False
+    assert "Unauthorized recipient" in data["error"]
+
+def test_smtp_authentication_failure_handling():
+    """Verify SMTP authentication failure reports accurate status without fake success."""
+    mock_creds = {
+        "smtp_host": "smtp.gmail.com",
+        "smtp_port": 587,
+        "smtp_user": "officer@gmail.com",
+        "smtp_password": "bad_password",
+        "smtp_from_email": "officer@gmail.com",
+        "smtp_use_tls": True
+    }
+    with patch.object(email_service, "get_credentials", return_value=mock_creds):
+        with patch("smtplib.SMTP") as mock_smtp_cls:
+            mock_server = MagicMock()
+            mock_server.login.side_effect = smtplib.SMTPAuthenticationError(535, b"5.7.8 Username and Password not accepted")
+            mock_smtp_cls.return_value = mock_server
+
+            res = client.post("/api/alerts/test-email", json={"note": "Test auth failure"})
+            assert res.status_code == 200
+            data = res.json()
+            assert data["delivery_status"] == "SMTP_AUTHENTICATION_FAILED"
+            assert data["delivery_confirmed"] is False
+            assert "SMTP Authentication failed" in data["error"]
+
+def test_smtp_status_no_secrets_leaked():
+    """Verify /api/alerts/smtp-status endpoint reports status without leaking password."""
+    res = client.get("/api/alerts/smtp-status")
+    assert res.status_code == 200
+    data = res.json()
+    assert "status" in data
+    assert "smtp_host" in data
+    assert "smtp_port" in data
+    assert "smtp_password" not in data
+
+def test_evaluate_thresholds_with_email_dispatch():
+    """Verify scanning thresholds triggers genuine email alert for high-risk wards."""
+    res = client.post("/api/alerts/evaluate-thresholds?disease=Dengue&force=true")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "evaluated"
+    assert "email_results" in data
+    assert data["high_risk_wards_count"] > 0
+    assert len(data["email_results"]) > 0
+    first_res = data["email_results"][0]
+    assert first_res["disease"] == "Dengue"
+    assert first_res["risk_level"] == "HIGH RISK"
+    assert first_res["recipient_email"] is not None
+

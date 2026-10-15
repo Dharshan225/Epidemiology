@@ -4,9 +4,15 @@ from backend.main import app
 
 client = TestClient(app)
 
-def test_dashboard_contract():
-    """Verify that /api/dashboard returns every field expected by the frontend."""
+def test_unauthenticated_dashboard_rejected():
+    """Verify that unauthenticated access to /api/dashboard returns HTTP 401 Unauthorized."""
     response = client.get("/api/dashboard")
+    assert response.status_code == 401
+    assert "detail" in response.json()
+
+def test_dashboard_contract(auth_client):
+    """Verify that authenticated /api/dashboard returns every field expected by the frontend."""
+    response = auth_client.get("/api/dashboard")
     assert response.status_code == 200
     data = response.json()
 
@@ -52,8 +58,8 @@ def test_dashboard_contract():
     assert "alerts" in data
     assert isinstance(data["alerts"], list)
 
-def test_wards_endpoint_contract():
-    response = client.get("/api/wards")
+def test_wards_endpoint_contract(auth_client):
+    response = auth_client.get("/api/wards")
     assert response.status_code == 200
     data = response.json()
     assert data["district"] == "Coimbatore"
@@ -64,8 +70,8 @@ def test_wards_endpoint_contract():
     assert first_ward["population"] > 0
     assert len(first_ward["position"]) == 2
 
-def test_risk_endpoint_contract():
-    response = client.get("/api/risk?disease=Dengue")
+def test_risk_endpoint_contract(auth_client):
+    response = auth_client.get("/api/risk?disease=Dengue")
     assert response.status_code == 200
     data = response.json()
     assert data["disease"] == "Dengue"
@@ -75,15 +81,14 @@ def test_risk_endpoint_contract():
         assert r["risk_level"] in ["High", "Medium", "Low"]
         assert r["attack_rate_per_1000"] >= 0
 
-def test_model_metrics_contract():
-    response = client.get("/api/model/metrics")
+def test_model_metrics_contract(auth_client):
+    response = auth_client.get("/api/model/metrics")
     assert response.status_code == 200
     data = response.json()
     assert "model_name" in data
     assert "status" in data
     assert "supported_horizons" in data
     assert "required_features" in data
-    # When model is not loaded, status must be unavailable
     if not data["model_loaded"]:
         assert data["status"] == "unavailable"
         assert data["mae"] is None

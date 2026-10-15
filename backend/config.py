@@ -47,6 +47,14 @@ class Settings(BaseSettings):
     FAST2SMS_ROUTE: str = "q"
     SMS_PROVIDER: str = ""
 
+    # SMTP Email Alert Gateway Configuration
+    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM_EMAIL: str = ""
+    SMTP_USE_TLS: bool = True
+
     # Predefined High-Risk Thresholds & Alert Cooldown
     HIGH_RISK_CASE_THRESHOLD: int = 24
     HIGH_RISK_COMPOSITE_THRESHOLD: float = 65.0

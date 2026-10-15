@@ -1,17 +1,21 @@
-from typing import Optional, List
-from fastapi import APIRouter, Query
+from typing import Optional, List, Dict, Any
+from fastapi import APIRouter, Query, Depends
 from backend.services.data_service import data_service
 from backend.services.weather_service import weather_service
 from backend.services.risk_service import risk_service
 from backend.services.model_service import model_service
 from backend.schemas import DashboardResponse, DashboardStatItem, AlertItem
+from backend.api.deps import get_current_officer
 
 router = APIRouter(prefix="/api", tags=["Dashboard"])
 
 @router.get("/alerts", response_model=List[AlertItem])
-async def get_alerts_endpoint():
+async def get_alerts_endpoint(
+    officer: Dict[str, Any] = Depends(get_current_officer)
+):
     """
     Returns active outbreak early warning alerts computed from EVOI risk scores and case spikes.
+    Requires authenticated municipal officer session.
     """
     return await risk_service.get_alerts()
 
@@ -19,7 +23,8 @@ async def get_alerts_endpoint():
 @router.get("/dashboard", response_model=DashboardResponse)
 async def get_dashboard(
     ward: Optional[str] = Query("All wards", description="Filter by ward name or 'All wards'"),
-    disease: Optional[str] = Query("Dengue", description="Disease name")
+    disease: Optional[str] = Query("Dengue", description="Disease name"),
+    officer: Dict[str, Any] = Depends(get_current_officer)
 ):
     """
     Returns complete dashboard surveillance metrics:

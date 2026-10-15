@@ -20,16 +20,41 @@ const API_BASE_URL = getApiBaseUrl();
 const DEFAULT_TIMEOUT_MS = 8000;
 
 async function fetchWithTimeout(resource, options = {}) {
-  const { timeout = DEFAULT_TIMEOUT_MS, ...fetchOptions } = options;
+  const { timeout = DEFAULT_TIMEOUT_MS, headers: customHeaders, ...fetchOptions } = options;
+  const headers = new Headers(customHeaders || {});
+
+  // Automatically attach authenticated municipal officer session token
+  try {
+    const saved = localStorage.getItem("epidemiology_officer");
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (parsed?.token) {
+        if (!headers.has("Authorization")) {
+          headers.set("Authorization", `Bearer ${parsed.token}`);
+        }
+        if (!headers.has("X-Officer-Token")) {
+          headers.set("X-Officer-Token", parsed.token);
+        }
+      }
+    }
+  } catch {}
+
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeout);
 
   try {
     const response = await fetch(resource, {
       ...fetchOptions,
+      headers,
       signal: controller.signal,
     });
     clearTimeout(id);
+
+    // If session expired or unauthorized on protected APIs, notify
+    if (response.status === 401 && typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("epidemiology_unauthorized"));
+    }
+
     return response;
   } catch (error) {
     clearTimeout(id);
@@ -347,6 +372,90 @@ export const api = {
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || err.message || `Failed to activate gateway (${res.status})`);
+    }
+    return res.json();
+  },
+
+  /**
+   * POST /api/alerts/dispatch-email
+   * Dispatch high-risk outbreak email alert to authorized municipal officer
+   */
+  async dispatchAlertEmail(payload = {}) {
+    const res = await fetchWithTimeout(`${API_BASE_URL}/api/alerts/dispatch-email`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || err.message || `Email dispatch failed (${res.status})`);
+    }
+    return res.json();
+  },
+
+  /**
+   * POST /api/alerts/test-email
+   * Single verification test email to authorized municipal officer
+   */
+  async sendTestEmail(recipient_email = null, note = null) {
+    const res = await fetchWithTimeout(`${API_BASE_URL}/api/alerts/test-email`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ recipient_email, note }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || err.message || `Test email failed (${res.status})`);
+    }
+    return res.json();
+  },
+
+  /**
+   * GET /api/alerts/email-history
+   * Audit trail of live and failed email alerts
+   */
+  async getEmailHistory() {
+    const res = await fetchWithTimeout(`${API_BASE_URL}/api/alerts/email-history`);
+    if (!res.ok) {
+      throw new Error(`Failed to fetch email history (${res.status})`);
+    }
+    return res.json();
+  },
+
+  /**
+   * DELETE /api/alerts/email-history
+   */
+  async clearEmailHistory() {
+    const res = await fetchWithTimeout(`${API_BASE_URL}/api/alerts/email-history`, {
+      method: "DELETE",
+    });
+    return res.json();
+  },
+
+  /**
+   * GET /api/alerts/smtp-status
+   * SMTP server configuration readiness
+   */
+  async getSmtpStatus() {
+    const res = await fetchWithTimeout(`${API_BASE_URL}/api/alerts/smtp-status`);
+    if (!res.ok) {
+      throw new Error(`Failed to fetch SMTP status (${res.status})`);
+    }
+    return res.json();
+  },
+
+  /**
+   * POST /api/alerts/configure-smtp
+   */
+  async configureSmtp(config) {
+    const res = await fetchWithTimeout(`${API_BASE_URL}/api/alerts/configure-smtp`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(config),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || err.message || `Failed to configure SMTP (${res.status})`);
     }
     return res.json();
   },

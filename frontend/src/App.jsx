@@ -186,6 +186,16 @@ export default function App() {
     localStorage.setItem("outbreakwatch_theme", theme);
   }, [theme]);
 
+  // Session guard: If any protected API responds with 401 Unauthorized, reset to login
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      setCurrentUser(null);
+      localStorage.removeItem("epidemiology_officer");
+    };
+    window.addEventListener("epidemiology_unauthorized", handleUnauthorized);
+    return () => window.removeEventListener("epidemiology_unauthorized", handleUnauthorized);
+  }, []);
+
   const toggleTheme = () => {
     setTheme((prev) => (prev === "dark" ? "light" : "dark"));
   };
@@ -258,8 +268,11 @@ export default function App() {
   const [inspectedWard, setInspectedWard] = useState(null);
   const [exportModalOpen, setExportModalOpen] = useState(false);
 
-  // Master Data Refresh Function
+  // Master Data Refresh Function (Only executes when officer is authenticated)
   const fetchAllData = useCallback(async () => {
+    if (!currentUser || !currentUser.is_authenticated) {
+      return;
+    }
     setLoading(true);
     setFetchError(null);
 
@@ -383,6 +396,43 @@ export default function App() {
     setSelectedWard(wardName);
     setActiveTab("overview");
   };
+
+  // Requirement 1: LOGIN FIRST
+  // Display the login page whenever an unauthenticated user opens the application.
+  // Only after successful authentication should the existing dashboard appear.
+  if (!currentUser || !currentUser.is_authenticated) {
+    return (
+      <div className="login-screen-view" data-theme={theme}>
+        <header className="login-screen-header">
+          <div className="login-brand-identity">
+            <div className="brand-dot" />
+            <div>
+              <span className="brand-title">EPIDEMIOLOGY</span>
+              <span className="brand-subtitle">Coimbatore Municipal Corporation · Public Health Division</span>
+            </div>
+          </div>
+          <button
+            className="btn-icon-topbar theme-toggle-btn"
+            onClick={toggleTheme}
+            title={theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
+            aria-label="Toggle dark and light theme"
+          >
+            {theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
+          </button>
+        </header>
+
+        <main className="login-screen-content">
+          <AdminLoginPage
+            currentUser={currentUser}
+            onLoginSuccess={handleLoginSuccess}
+            onLogout={handleLogout}
+            wards={wardData}
+            isStandalone={true}
+          />
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="app-shell" data-theme={theme}>

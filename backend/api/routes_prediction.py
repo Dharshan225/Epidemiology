@@ -1,5 +1,5 @@
-from typing import Optional
-from fastapi import APIRouter, HTTPException, Query
+from typing import Optional, Dict, Any
+from fastapi import APIRouter, HTTPException, Query, Depends
 from backend.services.prediction_service import prediction_service
 from backend.services.data_service import data_service
 from backend.services.weather_service import weather_service
@@ -10,14 +10,19 @@ from backend.schemas import (
     ForecastResponse,
     WeeklyDataPoint
 )
+from backend.api.deps import get_current_officer
 
 router = APIRouter(prefix="/api", tags=["Prediction & Forecasting"])
 
 @router.post("/predict", response_model=PredictionResponse)
-async def predict_disease_outbreak(request: PredictionRequest):
+async def predict_disease_outbreak(
+    request: PredictionRequest,
+    officer: Dict[str, Any] = Depends(get_current_officer)
+):
     """
     Predicts disease case counts for a given ward and forecast horizon.
     Validates disease, horizon (7, 14, 21 days), and environmental parameters.
+    Requires authenticated municipal officer session.
     """
     try:
         response = await prediction_service.generate_prediction(request)
@@ -33,7 +38,8 @@ async def predict_disease_outbreak(request: PredictionRequest):
 async def get_forecast_series(
     disease: str = Query("Dengue", description="Disease name"),
     ward: str = Query("All wards", description="Ward name or 'All wards'"),
-    horizon_days: int = Query(7, description="Forecast horizon in days (7, 14, 21)")
+    horizon_days: int = Query(7, description="Forecast horizon in days (7, 14, 21)"),
+    officer: Dict[str, Any] = Depends(get_current_officer)
 ):
     """
     Generates chronological epidemiological forecast series for the requested weekly horizon.
