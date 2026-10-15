@@ -2,15 +2,15 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://scenario-marie-blackjack-unto.trycloudflare.com/api/:path*"
+      "destination": "https://dialogue-bride-broadcast-budapest.trycloudflare.com/api/:path*"
     },
     {
       "source": "/docs",
-      "destination": "https://scenario-marie-blackjack-unto.trycloudflare.com/docs"
+      "destination": "https://dialogue-bride-broadcast-budapest.trycloudflare.com/docs"
     },
     {
       "source": "/openapi.json",
-      "destination": "https://scenario-marie-blackjack-unto.trycloudflare.com/openapi.json"
+      "destination": "https://dialogue-bride-broadcast-budapest.trycloudflare.com/openapi.json"
     }
   ]
 }

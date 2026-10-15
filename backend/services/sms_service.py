@@ -765,7 +765,7 @@ class SmsAlertService:
             return await self.dispatch_high_risk_alert(
                 officer_phone=officer_phone,
                 officer_name=officer_name,
-                high_risk_wards=[{"name": "Ward 07 (Gandhipuram)", "cases": 34, "risk": "High", "recommendation": "Initiate immediate thermal ULV fogging & fever surveillance."}],
+                high_risk_wards=[{"name": "Ward 10", "cases": 34, "risk": "High", "recommendation": "Initiate immediate thermal ULV fogging & fever surveillance."}],
                 disease="System Test",
                 custom_message=body,
                 prediction_date=date_str,
@@ -777,7 +777,7 @@ class SmsAlertService:
         # Demonstration Outbreak Alert (Unconfigured Gateway Demo Mode)
         timestamp = datetime.now(timezone.utc).isoformat()
         record_id = f"sms-demo-{secrets.token_hex(6)}"
-        ward_name = "Ward 07 (Gandhipuram)"
+        ward_name = "Ward 10"
         disease_name = "Dengue"
         risk_level = "HIGH RISK"
         recommended_action = "Initiate immediate thermal ULV fogging & fever surveillance."

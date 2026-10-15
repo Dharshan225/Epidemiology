@@ -33,6 +33,11 @@ def generate_training_dataset(output_path: Path) -> pd.DataFrame:
         {"id": 3, "name": "Ward 03", "pop": 13007, "base_risk": 1.05},
         {"id": 4, "name": "Ward 04", "pop": 25497, "base_risk": 0.85},
         {"id": 5, "name": "Ward 05", "pop": 15336, "base_risk": 1.00},
+        {"id": 6, "name": "Ward 06", "pop": 20326, "base_risk": 1.05},
+        {"id": 7, "name": "Ward 07", "pop": 14034, "base_risk": 0.80},
+        {"id": 8, "name": "Ward 08", "pop": 15683, "base_risk": 1.20},
+        {"id": 9, "name": "Ward 09", "pop": 22132, "base_risk": 0.85},
+        {"id": 10, "name": "Ward 10", "pop": 20916, "base_risk": 1.10},
     ]
 
     num_weeks = 104  # 2 full years (Epidemiological Weeks 1 to 104)

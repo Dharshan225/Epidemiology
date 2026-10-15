@@ -80,7 +80,7 @@ export default function AlertsPage({
     setDispatching(true);
     setDispatchResult(null);
     try {
-      const highRiskWard = wardData.find((w) => w.risk === "High" || w.cases >= 24) || { name: "Ward 07 (Gandhipuram)", cases: 34 };
+      const highRiskWard = wardData.find((w) => w.risk === "High" || w.cases >= 24) || { name: "Ward 10", cases: 34 };
       const res = await api.dispatchAlertEmail({
         recipient_email: currentUser?.email,
         recipient_name: currentUser?.name,

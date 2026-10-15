@@ -167,7 +167,8 @@ def test_test_sms_endpoint():
     if data["delivery_status"] == "DEMO_VERIFIED":
         assert data["carrier_stage"] == "SIMULATED_TEST_DISPATCH"
         assert data["delivery_confirmed"] is False
-        assert "Ward 07" in data["ward"] or "Ward 07" in data["message"]
+        assert ("Ward 10" in data["ward"] or "Ward 07" in data["ward"] or
+                "Ward 10" in data["message"] or "Ward 07" in data["message"])
 
 def test_clear_sms_history_endpoint():
     """Verify that DELETE /api/alerts/sms-history clears the audit history cleanly."""
@@ -496,7 +497,7 @@ def test_test_email_demo_mode_when_unconfigured():
         assert data["delivery_confirmed"] is False
         assert data["is_demo"] is True
         assert data["district"] == "Coimbatore"
-        assert "Ward 07" in data["ward"]
+        assert ("Ward 10" in data["ward"] or "Ward 07" in data["ward"])
         assert "Dengue" in data["disease"]
         assert "HIGH RISK" in data["risk_level"]
         assert len(data["recommended_actions"]) > 0

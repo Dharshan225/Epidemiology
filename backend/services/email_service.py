@@ -637,7 +637,7 @@ Timestamp: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}
                 recipient_email=recipient_email,
                 recipient_name=officer_name,
                 district="Coimbatore",
-                ward="Ward 07 (Gandhipuram) — TEST VERIFICATION",
+                ward="Ward 10 — TEST VERIFICATION",
                 disease="Dengue Surveillance Test",
                 risk_level="HIGH RISK (TEST ALERT)",
                 cases=29,
@@ -653,7 +653,7 @@ Timestamp: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}
         # Demonstration Outbreak Email Alert (Unconfigured SMTP Demo Mode)
         record_id = f"email-demo-{secrets.token_hex(6)}"
         timestamp = datetime.now(timezone.utc).isoformat()
-        ward_name = "Ward 07 (Gandhipuram)"
+        ward_name = "Ward 10"
         disease_name = "Dengue"
         risk_level = "HIGH RISK"
 
