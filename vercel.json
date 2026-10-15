@@ -1,0 +1,16 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://city-bag-los-systems.trycloudflare.com/api/:path*"
+    },
+    {
+      "source": "/docs",
+      "destination": "https://city-bag-los-systems.trycloudflare.com/docs"
+    },
+    {
+      "source": "/openapi.json",
+      "destination": "https://city-bag-los-systems.trycloudflare.com/openapi.json"
+    }
+  ]
+}
