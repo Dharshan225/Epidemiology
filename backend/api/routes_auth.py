@@ -330,19 +330,6 @@ async def send_single_test_sms(
             "provider_response": None
         }
 
-    validation = sms_service.validate_gateway()
-    if not validation["configured"]:
-        return {
-            "status": "unconfigured",
-            "delivery_status": "GATEWAY_NOT_CONFIGURED",
-            "carrier_stage": "GATEWAY_NOT_CONFIGURED",
-            "delivery_confirmed": False,
-            "recipient_phone": officer_phone,
-            "error": "SMS Gateway is not configured. Add FAST2SMS_API_KEY to backend/.env first.",
-            "instructions": validation.get("instructions"),
-            "provider_response": None
-        }
-
     return await sms_service.dispatch_test_sms(
         officer_phone=officer_phone,
         officer_name=officer_name,

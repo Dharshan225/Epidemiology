@@ -593,7 +593,7 @@ SMTP_USE_TLS=True
                 className={`dispatch-result-card ${
                   lastEmailResult.delivery_status === "SENT"
                     ? "success"
-                    : lastEmailResult.delivery_status === "SMTP_NOT_CONFIGURED"
+                    : lastEmailResult.delivery_status === "SMTP_NOT_CONFIGURED" || lastEmailResult.delivery_status === "DEMO_VERIFIED"
                     ? "warn"
                     : "failed"
                 }`}
@@ -602,7 +602,7 @@ SMTP_USE_TLS=True
                 <div className="result-header">
                   {lastEmailResult.delivery_status === "SENT" ? (
                     <CheckCircle2 size={16} className="text-emerald" />
-                  ) : lastEmailResult.delivery_status === "SMTP_NOT_CONFIGURED" ? (
+                  ) : lastEmailResult.delivery_status === "SMTP_NOT_CONFIGURED" || lastEmailResult.delivery_status === "DEMO_VERIFIED" ? (
                     <AlertTriangle size={16} className="text-amber" />
                   ) : (
                     <XCircle size={16} className="text-red" />
@@ -672,7 +672,7 @@ SMTP_USE_TLS=True
                               className={`sms-status-pill ${
                                 item.delivery_status === "SENT"
                                   ? "pill-delivered"
-                                  : item.delivery_status === "SMTP_NOT_CONFIGURED"
+                                  : item.delivery_status === "SMTP_NOT_CONFIGURED" || item.delivery_status === "DEMO_VERIFIED"
                                   ? "pill-warn"
                                   : "pill-failed"
                               }`}
@@ -730,7 +730,7 @@ SMTP_USE_TLS=True
                 className={`dispatch-result-card ${
                   lastDispatchResult.delivery_status === "SENT"
                     ? "success"
-                    : lastDispatchResult.delivery_status === "GATEWAY_NOT_CONFIGURED"
+                    : lastDispatchResult.delivery_status === "GATEWAY_NOT_CONFIGURED" || lastDispatchResult.delivery_status === "DEMO_VERIFIED"
                     ? "warn"
                     : "failed"
                 }`}
@@ -739,7 +739,7 @@ SMTP_USE_TLS=True
                 <div className="result-header">
                   {lastDispatchResult.delivery_status === "SENT" ? (
                     <CheckCircle2 size={16} className="text-emerald" />
-                  ) : lastDispatchResult.delivery_status === "GATEWAY_NOT_CONFIGURED" ? (
+                  ) : lastDispatchResult.delivery_status === "GATEWAY_NOT_CONFIGURED" || lastDispatchResult.delivery_status === "DEMO_VERIFIED" ? (
                     <AlertTriangle size={16} className="text-amber" />
                   ) : (
                     <XCircle size={16} className="text-red" />
@@ -810,7 +810,7 @@ SMTP_USE_TLS=True
                               className={`sms-status-pill ${
                                 item.delivery_status === "SENT" || item.status === "delivered" || item.status === "submitted"
                                   ? "pill-delivered"
-                                  : item.delivery_status === "GATEWAY_NOT_CONFIGURED"
+                                  : item.delivery_status === "GATEWAY_NOT_CONFIGURED" || item.delivery_status === "DEMO_VERIFIED"
                                   ? "pill-warn"
                                   : "pill-failed"
                               }`}

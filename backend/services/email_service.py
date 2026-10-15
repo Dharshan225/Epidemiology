@@ -54,6 +54,17 @@ class EmailAlertService:
         self.deduplicator = EmailAlertDeduplicator(
             cooldown_hours=getattr(settings, "ALERT_COOLDOWN_HOURS", 12)
         )
+        self._load_history_from_db()
+
+    def _load_history_from_db(self):
+        try:
+            from backend.db import get_email_audits
+            audits = get_email_audits(50)
+            if audits:
+                self.dispatch_history = audits
+        except Exception as e:
+            logger.debug(f"Could not load email history from db: {e}")
+
 
     def get_credentials(self) -> Dict[str, Any]:
         """
@@ -161,6 +172,16 @@ class EmailAlertService:
             "delivery_status": "READY" if is_configured else "SMTP_NOT_CONFIGURED",
             "instructions": instructions,
         }
+
+    def _record_dispatch(self, record: Dict[str, Any]):
+        self.dispatch_history.insert(0, record)
+        if len(self.dispatch_history) > 100:
+            self.dispatch_history.pop()
+        try:
+            from backend.db import save_email_audit
+            save_email_audit(record)
+        except Exception as e:
+            logger.debug(f"Failed to persist email alert to db: {e}")
 
     def update_env_file(self, updates: Dict[str, str]) -> bool:
         """Persists SMTP configuration updates to backend/.env safely."""
@@ -411,7 +432,7 @@ Timestamp: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}
                 "recommended_actions": actions,
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
-            self.dispatch_history.insert(0, record)
+            self._record_dispatch(record)
             return record
 
         creds = self.get_credentials()
@@ -482,7 +503,7 @@ Timestamp: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}
                 "recommended_actions": actions,
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
-            self.dispatch_history.insert(0, record)
+            self._record_dispatch(record)
             logger.info(f"Genuine email alert dispatched to {recipient_email} for ward {ward}")
             return record
 
@@ -507,7 +528,7 @@ Timestamp: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}
                 "recommended_actions": actions,
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
-            self.dispatch_history.insert(0, record)
+            self._record_dispatch(record)
             return record
 
         except smtplib.SMTPConnectError as conn_err:
@@ -530,7 +551,7 @@ Timestamp: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}
                 "recommended_actions": actions,
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
-            self.dispatch_history.insert(0, record)
+            self._record_dispatch(record)
             return record
 
         except smtplib.SMTPRecipientsRefused as rec_err:
@@ -553,7 +574,7 @@ Timestamp: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}
                 "recommended_actions": actions,
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
-            self.dispatch_history.insert(0, record)
+            self._record_dispatch(record)
             return record
 
         except Exception as e:
@@ -576,7 +597,7 @@ Timestamp: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}
                 "recommended_actions": actions,
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
-            self.dispatch_history.insert(0, record)
+            self._record_dispatch(record)
             return record
 
         finally:
@@ -592,30 +613,103 @@ Timestamp: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}
         recipient_name: Optional[str] = None,
         note: Optional[str] = None
     ) -> Dict[str, Any]:
-        """Sends a single test email to the authorized officer to verify SMTP setup."""
-        return await self.dispatch_high_risk_email(
-            recipient_email=recipient_email,
-            recipient_name=recipient_name or "Authorized Municipal Officer",
-            district="Coimbatore",
-            ward="Ward 07 (Gandhipuram) — TEST VERIFICATION",
-            disease="Dengue Surveillance Test",
-            risk_level="HIGH RISK (TEST ALERT)",
-            cases=29,
-            prediction_date=datetime.now(timezone.utc).strftime("%Y-%m-%d"),
-            recommended_actions=[
-                "Verify SMTP connectivity between Epidemiology platform and municipal officer mailbox.",
-                "Confirm that High Risk ward alert templates render correctly on desktop and mobile clients.",
-                note or "This is a single verification test dispatch initiated by the authenticated municipal officer."
-            ],
-            force=True
-        )
+        """
+        Sends a test email alert to the authorized municipal officer.
+        - If SMTP credentials are configured, sends genuine email over SMTP.
+        - If SMTP credentials are NOT configured, generates a demonstration outbreak alert in demo mode.
+        - Honestly distinguishes simulated alert (delivery_status='DEMO_VERIFIED', delivery_confirmed=False).
+        - Saves each alert attempt to the backend SQLite database and updates the audit log.
+        - Permits repeated clicks using the same officer details without duplicate rejection.
+        """
+        validation = self.validate_smtp()
+        officer_name = recipient_name or "Authorized Municipal Officer"
+        pred_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        actions = [
+            "Initiate immediate thermal ultra-low volume (ULV) fogging across residential clusters.",
+            "Deploy source reduction squads for abate larviciding in overhead tanks, sumps, and open drains.",
+            "Activate mobile fever clinic and rapid NS1 diagnostic testing at the local Primary Health Centre (PHC).",
+            "Broadcast vector awareness and dry-day advisories to resident welfare associations.",
+            "Alert Coimbatore Medical College Hospital (CMCH) and ESI Hospital for inpatient bed readiness."
+        ]
+
+        if validation["configured"]:
+            return await self.dispatch_high_risk_email(
+                recipient_email=recipient_email,
+                recipient_name=officer_name,
+                district="Coimbatore",
+                ward="Ward 07 (Gandhipuram) — TEST VERIFICATION",
+                disease="Dengue Surveillance Test",
+                risk_level="HIGH RISK (TEST ALERT)",
+                cases=29,
+                prediction_date=pred_date,
+                recommended_actions=[
+                    "Verify SMTP connectivity between Epidemiology platform and municipal officer mailbox.",
+                    "Confirm that High Risk ward alert templates render correctly on desktop and mobile clients.",
+                    note or "This is a single verification test dispatch initiated by the authenticated municipal officer."
+                ],
+                force=True
+            )
+
+        # Demonstration Outbreak Email Alert (Unconfigured SMTP Demo Mode)
+        record_id = f"email-demo-{secrets.token_hex(6)}"
+        timestamp = datetime.now(timezone.utc).isoformat()
+        ward_name = "Ward 07 (Gandhipuram)"
+        disease_name = "Dengue"
+        risk_level = "HIGH RISK"
+
+        record = {
+            "id": record_id,
+            "timestamp": timestamp,
+            "recipient_email": recipient_email,
+            "recipient_name": officer_name,
+            "district": "Coimbatore",
+            "ward": ward_name,
+            "disease": disease_name,
+            "risk_level": risk_level,
+            "cases": 34,
+            "prediction_date": pred_date,
+            "delivery_status": "DEMO_VERIFIED",
+            "carrier_stage": "SIMULATED_TEST_DISPATCH",
+            "delivery_confirmed": False,
+            "smtp_server": "Demo Simulator (No SMTP Credentials Required)",
+            "status": "demonstration",
+            "subject": f"[DEMO OUTBREAK ALERT] High Risk in {ward_name} ({disease_name}) — Coimbatore",
+            "recommended_actions": actions,
+            "status_note": (
+                "Demonstration outbreak email alert generated successfully. "
+                "Real SMTP dispatch requires SMTP_USER and SMTP_PASSWORD in backend/.env."
+            ),
+            "error": None,
+            "is_demo": True,
+            "is_test": True
+        }
+
+        # Save to database and memory history
+        try:
+            from backend.db import save_email_audit
+            save_email_audit(record)
+        except Exception as e:
+            logger.debug(f"Failed to persist demo email to db: {e}")
+
+        self.dispatch_history.insert(0, record)
+        if len(self.dispatch_history) > 100:
+            self.dispatch_history.pop()
+
+        logger.info(f"Demonstration email alert generated for {recipient_email} (ID: {record_id})")
+        return record
 
     def get_history(self) -> List[Dict[str, Any]]:
         return self.dispatch_history
 
     def clear_history(self):
+        """Clears email dispatch history from memory and database."""
         self.dispatch_history.clear()
         self.deduplicator.clear()
+        try:
+            from backend.db import clear_email_audits
+            clear_email_audits()
+        except Exception:
+            pass
 
 
 email_service = EmailAlertService()

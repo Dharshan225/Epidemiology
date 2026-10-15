@@ -52,6 +52,17 @@ class SmsAlertService:
         self.deduplicator = AlertDeduplicator(
             cooldown_hours=getattr(settings, "ALERT_COOLDOWN_HOURS", 12)
         )
+        self._load_history_from_db()
+
+    def _load_history_from_db(self):
+        try:
+            from backend.db import get_sms_audits
+            audits = get_sms_audits(50)
+            if audits:
+                self.dispatch_history = audits
+        except Exception as e:
+            logger.debug(f"Could not load SMS history from db: {e}")
+
 
     def get_credentials(self) -> Dict[str, str]:
         """
@@ -719,6 +730,12 @@ class SmsAlertService:
         if len(self.dispatch_history) > 100:
             self.dispatch_history.pop()
 
+        try:
+            from backend.db import save_sms_audit
+            save_sms_audit(result)
+        except Exception as e:
+            logger.debug(f"Failed to persist SMS dispatch to db: {e}")
+
         return result
 
     async def dispatch_test_sms(
@@ -728,25 +745,97 @@ class SmsAlertService:
         note: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Sends a single test SMS to the authorized recipient after gateway configuration.
+        Sends a test SMS alert to the authorized municipal officer.
+        - If SMS gateway credentials (Twilio or Fast2SMS) are configured, transmits real cellular SMS.
+        - If SMS gateway is NOT configured, generates an authentic demonstration outbreak alert in demo mode.
+        - Honestly distinguishes simulated alert (delivery_status='DEMO_VERIFIED', delivery_confirmed=False).
+        - Saves each alert attempt to the backend SQLite database and updates the audit log.
+        - Permits repeated clicks using the same officer details without duplicate rejection.
         """
+        import secrets
+        validation = self.validate_gateway()
         date_str = datetime.now().strftime("%Y-%m-%d")
-        body = (
-            f"EPIDEMIOLOGY SYSTEM TEST: Gateway verification for {officer_name}. "
-            f"Date: {date_str}. "
-            f"Action: Alert pipeline active. Coimbatore Municipal Corporation. Ref: CMC/PHD"
+
+        if validation["configured"]:
+            body = (
+                f"EPIDEMIOLOGY SYSTEM TEST: Gateway verification for {officer_name}. "
+                f"Date: {date_str}. "
+                f"Action: Alert pipeline active. Coimbatore Municipal Corporation. Ref: CMC/PHD"
+            )
+            return await self.dispatch_high_risk_alert(
+                officer_phone=officer_phone,
+                officer_name=officer_name,
+                high_risk_wards=[{"name": "Ward 07 (Gandhipuram)", "cases": 34, "risk": "High", "recommendation": "Initiate immediate thermal ULV fogging & fever surveillance."}],
+                disease="System Test",
+                custom_message=body,
+                prediction_date=date_str,
+                force=True,  # Test SMS overrides deduplication
+                is_automated=False,
+                is_test=True
+            )
+
+        # Demonstration Outbreak Alert (Unconfigured Gateway Demo Mode)
+        timestamp = datetime.now(timezone.utc).isoformat()
+        record_id = f"sms-demo-{secrets.token_hex(6)}"
+        ward_name = "Ward 07 (Gandhipuram)"
+        disease_name = "Dengue"
+        risk_level = "HIGH RISK"
+        recommended_action = "Initiate immediate thermal ULV fogging & fever surveillance."
+
+        demo_message = (
+            f"[DEMO OUTBREAK ALERT] High risk detected in {ward_name}, Coimbatore. "
+            f"Disease: {disease_name}. Date: {date_str}. "
+            f"Action: {recommended_action} "
+            f"Ref: CMC/PHD (Demo mode - no cellular SMS sent)"
         )
-        return await self.dispatch_high_risk_alert(
-            officer_phone=officer_phone,
-            officer_name=officer_name,
-            high_risk_wards=[{"name": "System Test Ward", "cases": 0, "risk": "Test", "recommendation": "Verification test action"}],
-            disease="System Test",
-            custom_message=body,
-            prediction_date=date_str,
-            force=True,  # Test SMS overrides deduplication
-            is_automated=False,
-            is_test=True
-        )
+
+        record = {
+            "id": record_id,
+            "timestamp": timestamp,
+            "status": "demonstration",
+            "delivery_status": "DEMO_VERIFIED",
+            "carrier_stage": "SIMULATED_TEST_DISPATCH",
+            "delivery_confirmed": False,
+            "recipient_name": officer_name or "Municipal Health Officer",
+            "recipient_phone": officer_phone,
+            "district": "Coimbatore",
+            "ward": ward_name,
+            "wards": [ward_name],
+            "disease": disease_name,
+            "risk_level": risk_level,
+            "prediction_date": date_str,
+            "message": demo_message,
+            "gateway": "Demo Simulator (No Provider Credentials)",
+            "provider": "Demo Simulator (No Provider Credentials)",
+            "provider_id": f"DEMO-{secrets.token_hex(4).upper()}",
+            "provider_response": {
+                "return": True,
+                "mode": "demonstration",
+                "message": "Simulated demonstration SMS alert generated without external provider credentials."
+            },
+            "status_note": (
+                "Demonstration outbreak alert generated successfully. "
+                "Real cellular delivery requires Twilio or Fast2SMS in backend/.env."
+            ),
+            "error": None,
+            "is_duplicate": False,
+            "is_demo": True,
+            "is_test": True
+        }
+
+        # Save to database and memory history
+        try:
+            from backend.db import save_sms_audit
+            save_sms_audit(record)
+        except Exception as e:
+            logger.debug(f"Failed to persist demo SMS to db: {e}")
+
+        self.dispatch_history.insert(0, record)
+        if len(self.dispatch_history) > 100:
+            self.dispatch_history.pop()
+
+        logger.info(f"Demonstration SMS alert generated for {officer_phone} (ID: {record_id})")
+        return record
 
     async def check_and_alert_thresholds(
         self,
@@ -806,8 +895,13 @@ class SmsAlertService:
         return self.dispatch_history
 
     def clear_history(self):
-        """Clears the dispatch history log."""
+        """Clears the dispatch history log from memory and database."""
         self.dispatch_history.clear()
+        try:
+            from backend.db import clear_sms_audits
+            clear_sms_audits()
+        except Exception:
+            pass
 
 
 sms_service = SmsAlertService()

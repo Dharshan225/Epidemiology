@@ -157,16 +157,17 @@ def test_prevent_repeated_attempts_when_unconfigured():
 
 def test_test_sms_endpoint():
     """
-    Requirement 4: After configuration, allow a single test SMS to an authorized recipient.
-    When unconfigured, returns clear instructions without queuing retries.
+    Requirement 4: When unconfigured, allow demonstration test SMS to authorized recipient.
+    Honest status DEMO_VERIFIED or GATEWAY_NOT_CONFIGURED or SENT.
     """
     response = client.post("/api/alerts/test-sms", json={"note": "Connectivity verification test"})
     assert response.status_code == 200
     data = response.json()
-    assert data["delivery_status"] in ("SENT", "GATEWAY_NOT_CONFIGURED", "FAILED")
-    if data["delivery_status"] == "GATEWAY_NOT_CONFIGURED":
-        assert "instructions" in data
-        assert "carrier_stage" in data
+    assert data["delivery_status"] in ("SENT", "GATEWAY_NOT_CONFIGURED", "FAILED", "DEMO_VERIFIED")
+    if data["delivery_status"] == "DEMO_VERIFIED":
+        assert data["carrier_stage"] == "SIMULATED_TEST_DISPATCH"
+        assert data["delivery_confirmed"] is False
+        assert "Ward 07" in data["ward"] or "Ward 07" in data["message"]
 
 def test_clear_sms_history_endpoint():
     """Verify that DELETE /api/alerts/sms-history clears the audit history cleanly."""
@@ -471,4 +472,162 @@ def test_evaluate_thresholds_with_email_dispatch():
     assert first_res["disease"] == "Dengue"
     assert first_res["risk_level"] == "HIGH RISK"
     assert first_res["recipient_email"] is not None
+
+
+def test_test_email_demo_mode_when_unconfigured():
+    """
+    Requirement 3 & 5: When SMTP is unconfigured, 'Send Test Email to Officer'
+    generates a demonstration outbreak alert with required fields and honest status.
+    """
+    email_service.clear_history()
+    with patch.object(email_service, "get_credentials", return_value={
+        "smtp_host": "smtp.gmail.com",
+        "smtp_port": 587,
+        "smtp_user": "",
+        "smtp_password": "",
+        "smtp_from_email": "",
+        "smtp_use_tls": True
+    }):
+        res = client.post("/api/alerts/test-email", json={"note": "Demo email click"})
+        assert res.status_code == 200
+        data = res.json()
+        assert data["delivery_status"] == "DEMO_VERIFIED"
+        assert data["carrier_stage"] == "SIMULATED_TEST_DISPATCH"
+        assert data["delivery_confirmed"] is False
+        assert data["is_demo"] is True
+        assert data["district"] == "Coimbatore"
+        assert "Ward 07" in data["ward"]
+        assert "Dengue" in data["disease"]
+        assert "HIGH RISK" in data["risk_level"]
+        assert len(data["recommended_actions"]) > 0
+        assert "prediction_date" in data
+        assert "timestamp" in data
+        assert "Demo Simulator" in data["smtp_server"]
+
+
+def test_test_sms_repeated_clicks_persists_in_db():
+    """
+    Requirement 5 & 6: Repeated clicks on 'Send Test SMS to Officer' with the same officer
+    must generate a separate audit record for each click, persisted in SQLite database.
+    """
+    sms_service.clear_history()
+    from backend.db import get_sms_audits
+
+    # Click 1
+    res1 = client.post("/api/alerts/test-sms", json={"note": "Click 1"})
+    assert res1.status_code == 200
+    d1 = res1.json()
+
+    # Click 2 (same recipient)
+    res2 = client.post("/api/alerts/test-sms", json={"note": "Click 2"})
+    assert res2.status_code == 200
+    d2 = res2.json()
+
+    # Click 3 (same recipient)
+    res3 = client.post("/api/alerts/test-sms", json={"note": "Click 3"})
+    assert res3.status_code == 200
+    d3 = res3.json()
+
+    # Must have distinct IDs
+    assert d1["id"] != d2["id"]
+    assert d2["id"] != d3["id"]
+
+    # History endpoint must have all 3
+    hist_res = client.get("/api/alerts/sms-history")
+    assert hist_res.status_code == 200
+    history = hist_res.json()["history"]
+    assert len(history) >= 3
+
+    # Database must persist all 3
+    db_rows = get_sms_audits(50)
+    db_ids = [r["id"] for r in db_rows]
+    assert d1["id"] in db_ids
+    assert d2["id"] in db_ids
+    assert d3["id"] in db_ids
+
+
+def test_test_email_repeated_clicks_persists_in_db():
+    """
+    Requirement 5 & 6: Repeated clicks on 'Send Test Email to Officer' with the same officer
+    must generate a separate audit record for each click, persisted in SQLite database.
+    """
+    email_service.clear_history()
+    from backend.db import get_email_audits
+
+    # Click 1
+    res1 = client.post("/api/alerts/test-email", json={"note": "Click 1"})
+    assert res1.status_code == 200
+    d1 = res1.json()
+
+    # Click 2 (same recipient)
+    res2 = client.post("/api/alerts/test-email", json={"note": "Click 2"})
+    assert res2.status_code == 200
+    d2 = res2.json()
+
+    # Click 3 (same recipient)
+    res3 = client.post("/api/alerts/test-email", json={"note": "Click 3"})
+    assert res3.status_code == 200
+    d3 = res3.json()
+
+    # Must have distinct IDs
+    assert d1["id"] != d2["id"]
+    assert d2["id"] != d3["id"]
+
+    # History endpoint must have all 3
+    hist_res = client.get("/api/alerts/email-history")
+    assert hist_res.status_code == 200
+    history = hist_res.json()["history"]
+    assert len(history) >= 3
+
+    # Database must persist all 3
+    db_rows = get_email_audits(50)
+    db_ids = [r["id"] for r in db_rows]
+    assert d1["id"] in db_ids
+    assert d2["id"] in db_ids
+    assert d3["id"] in db_ids
+
+
+def test_demo_alerts_honest_status_no_fake_delivery_claim():
+    """
+    Requirement 8: Demo mode must clearly distinguish simulated alerts from actual delivery.
+    delivery_confirmed must be False, delivery_status must be DEMO_VERIFIED,
+    and status_note must clearly explain demo mode without claiming real delivery.
+    """
+    sms_res = client.post("/api/alerts/test-sms")
+    sms_data = sms_res.json()
+    assert sms_data["delivery_confirmed"] is False
+    assert sms_data["delivery_status"] == "DEMO_VERIFIED"
+    assert "Real cellular delivery requires" in sms_data["status_note"] or "demo" in sms_data["status_note"].lower()
+
+    email_res = client.post("/api/alerts/test-email")
+    email_data = email_res.json()
+    assert email_data["delivery_confirmed"] is False
+    assert email_data["delivery_status"] == "DEMO_VERIFIED"
+    assert "Real SMTP dispatch requires" in email_data["status_note"] or "demo" in email_data["status_note"].lower()
+
+
+def test_real_smtp_dispatch_when_configured():
+    """
+    Requirement 9: Preserve existing real email delivery when SMTP is configured.
+    """
+    mock_creds = {
+        "smtp_host": "smtp.gmail.com",
+        "smtp_port": 587,
+        "smtp_user": "verified_officer@gmail.com",
+        "smtp_password": "valid_app_password",
+        "smtp_from_email": "verified_officer@gmail.com",
+        "smtp_use_tls": True
+    }
+    with patch.object(email_service, "get_credentials", return_value=mock_creds):
+        with patch("smtplib.SMTP") as mock_smtp_cls:
+            mock_server = MagicMock()
+            mock_smtp_cls.return_value = mock_server
+
+            res = client.post("/api/alerts/test-email", json={"note": "Real SMTP test"})
+            assert res.status_code == 200
+            data = res.json()
+            assert data["delivery_status"] == "SENT"
+            assert data["delivery_confirmed"] is True
+            assert mock_server.sendmail.called
+
 
